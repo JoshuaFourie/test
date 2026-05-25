@@ -1,0 +1,34 @@
+services:
+  xg-control:
+    build: .
+    container_name: xg-control
+    restart: unless-stopped
+
+    # Host network mode is required so the app can read the LAN ARP table
+    # to verify parent phone MAC addresses on incoming requests.
+    network_mode: host
+
+    environment:
+      # ── Sophos XG connection ───────────────────────────────────────────────
+      - XG_HOST=${XG_HOST}
+      - XG_PORT=${XG_PORT:-4444}
+      - XG_USERNAME=${XG_USERNAME}
+      - XG_PASSWORD=${XG_PASSWORD}
+
+      # ── Parent phone MACs (initial seed — can also be set via Settings UI) ─
+      - MY_MAC=${MY_MAC}
+      - WIFE_MAC=${WIFE_MAC}
+
+      # ── App security ──────────────────────────────────────────────────────
+      - SECRET_KEY=${SECRET_KEY}
+
+    volumes:
+      # Persistent storage for kid rules and UI-updated MACs
+      - ./data:/data
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Access Denied — XG Control{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+  <div style="font-size: 5rem;" class="mb-3">🛡️</div>
+  <h2 class="text-danger mb-2">Access Denied</h2>
+  <p class="text-secondary mb-4">
+    Your device is not in the approved MAC address list.
+  </p>
+  <div class="card d-inline-block text-start px-4 py-3 mb-4">
+    <div class="small text-secondary mb-1">Connecting from</div>
+    <div class="font-monospace">IP: {{ client_ip or 'unknown' }}</div>
+    <div class="font-monospace">MAC: {{ client_mac or 'not found in ARP table' }}</div>
+  </div>
+  <p class="text-secondary small">
+    Add your MAC address in <code>.env</code> or via the Settings page<br>
+    using a device that already has access.
+  </p>
+  <button class="btn btn-outline-secondary mt-3" onclick="location.reload()">
+    <i class="bi bi-arrow-clockwise me-2"></i>Try Again
+  </button>
+</div>
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Settings — XG Control{% endblock %}
+
+{% block content %}
+
+<!-- MAC Authentication -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-phone-fill text-primary"></i>
+    <strong>Parent Phones (Access Control)</strong>
+  </div>
+  <div class="card-body">
+    <p class="text-secondary small mb-3">
+      Only requests from these MAC addresses can access this app.
+      Leave blank to rely on the <code>.env</code> file values.
+    </p>
+    <form method="POST">
+      <input type="hidden" name="action" value="update_macs">
+      <div class="mb-3">
+        <label class="form-label">My Phone MAC</label>
+        <input type="text" class="form-control font-monospace"
+               name="my_mac" value="{{ my_mac }}"
+               placeholder="AA:BB:CC:DD:EE:FF"
+               pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$">
+        <div class="form-text">Find this in your phone's Wi-Fi settings.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Wife's Phone MAC</label>
+        <input type="text" class="form-control font-monospace"
+               name="wife_mac" value="{{ wife_mac }}"
+               placeholder="AA:BB:CC:DD:EE:FF"
+               pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$">
+      </div>
+      <button type="submit" class="btn btn-primary w-100">
+        <i class="bi bi-save me-2"></i>Save MAC Addresses
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Kids Rules -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-list-check text-success"></i>
+    <strong>Managed Kids Rules</strong>
+  </div>
+  <div class="card-body">
+
+    {% if fw_error %}
+    <div class="alert alert-warning small">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      Cannot reach firewall: {{ fw_error }}<br>
+      You can still add rules by name manually.
+    </div>
+    {% endif %}
+
+    <!-- Existing managed rules -->
+    {% if kid_rules %}
+    <ul class="list-group list-group-flush mb-3">
+      {% for rule in kid_rules %}
+      <li class="list-group-item d-flex justify-content-between align-items-center"
+          style="background:transparent; border-color:#30363d;">
+        <span class="font-monospace small">{{ rule }}</span>
+        <form method="POST" class="mb-0">
+          <input type="hidden" name="action" value="remove_rule">
+          <input type="hidden" name="rule_name" value="{{ rule }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-secondary small mb-3">No rules added yet.</p>
+    {% endif %}
+
+    <!-- Add from firewall rule picker -->
+    {% if all_rules %}
+    <form method="POST" class="mb-2">
+      <input type="hidden" name="action" value="add_rule">
+      <label class="form-label small text-secondary">Add from existing firewall rules</label>
+      <div class="input-group">
+        <select name="rule_name" class="form-select form-select-sm font-monospace">
+          <option value="">— pick a rule —</option>
+          {% for rule in all_rules | sort(attribute='name') %}
+            {% if rule.name not in kid_rules %}
+            <option value="{{ rule.name }}">{{ rule.name }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-success">
+          <i class="bi bi-plus-lg"></i>
+        </button>
+      </div>
+    </form>
+    {% endif %}
+
+    <!-- Add by name manually -->
+    <form method="POST">
+      <input type="hidden" name="action" value="add_rule">
+      <label class="form-label small text-secondary">Or type rule name manually</label>
+      <div class="input-group">
+        <input type="text" class="form-control form-control-sm font-monospace"
+               name="rule_name" placeholder="Exact rule name from XG">
+        <button type="submit" class="btn btn-sm btn-outline-success">
+          <i class="bi bi-plus-lg"></i>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Connection info (read-only) -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-hdd-network text-warning"></i>
+    <strong>Firewall Connection</strong>
+  </div>
+  <div class="card-body">
+    <p class="text-secondary small mb-2">
+      Connection details are set via the <code>.env</code> file / environment variables.
+    </p>
+    <table class="table table-sm table-borderless text-secondary small mb-0">
+      <tr><td>XG_HOST</td><td class="font-monospace">{{ config.get('xg_host') or '(from .env)' }}</td></tr>
+      <tr><td>XG_PORT</td><td class="font-monospace">{{ config.get('xg_port') or '(from .env)' }}</td></tr>
+      <tr><td>XG_USERNAME</td><td class="font-monospace">{{ config.get('xg_user') or '(from .env)' }}</td></tr>
+    </table>
+    <a href="/api/rules" class="btn btn-sm btn-outline-secondary mt-2" target="_blank">
+      <i class="bi bi-list-ul me-1"></i>List all firewall rules (JSON)
+    </a>
+  </div>
+</div>
+
+{% endblock %}

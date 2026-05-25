@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — XG Control{% endblock %}
+
+{% block content %}
+
+{% if setup_mode %}
+<div class="alert alert-setup mb-4">
+  <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+  <strong>Setup mode</strong> — No MAC addresses configured yet.
+  Go to <a href="/settings" class="alert-link">Settings</a> to add your phone MACs and create kid rules.
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-danger mb-4">
+  <i class="bi bi-wifi-off me-2"></i>
+  <strong>Firewall unreachable:</strong> {{ error }}
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0 text-secondary fw-semibold">
+    <i class="bi bi-toggles me-2"></i>Kids Rules
+  </h5>
+  <button class="btn btn-sm btn-outline-secondary" id="refreshBtn" onclick="refreshAll()">
+    <i class="bi bi-arrow-clockwise"></i>
+  </button>
+</div>
+
+{% if not kid_rules %}
+<div class="card text-center py-5">
+  <div class="card-body">
+    <i class="bi bi-list-ul display-4 text-secondary mb-3 d-block"></i>
+    <p class="text-secondary mb-3">No rules configured yet.</p>
+    <a href="/settings" class="btn btn-primary">
+      <i class="bi bi-gear-fill me-2"></i>Add Rules in Settings
+    </a>
+  </div>
+</div>
+{% else %}
+<div id="ruleList">
+{% for name in kid_rules %}
+  {% set rule = rule_statuses.get(name, {'name': name, 'status': 'unknown'}) %}
+  {% set is_enabled = rule.status | lower == 'enable' %}
+  {% set status_cls = 'enabled' if is_enabled else ('disabled' if rule.status | lower == 'disable' else 'unknown') %}
+<div class="card rule-card {{ status_cls }} mb-3" id="card-{{ loop.index }}">
+  <div class="card-body d-flex align-items-center gap-3 py-3">
+    <div class="flex-grow-1">
+      <div class="fw-semibold fs-6">{{ name }}</div>
+      {% if rule.description %}
+        <div class="text-secondary small">{{ rule.description }}</div>
+      {% endif %}
+      <span class="badge status-badge {{ status_cls }} mt-1" id="badge-{{ loop.index }}">
+        {{ 'ALLOWED' if is_enabled else ('BLOCKED' if rule.status | lower == 'disable' else 'UNKNOWN') }}
+      </span>
+    </div>
+    <div class="form-check form-switch mb-0 d-flex align-items-center">
+      <input
+        class="form-check-input rule-toggle"
+        type="checkbox"
+        role="switch"
+        id="toggle-{{ loop.index }}"
+        data-rule="{{ name }}"
+        data-index="{{ loop.index }}"
+        {{ 'checked' if is_enabled else '' }}
+        {{ 'disabled' if rule.status == 'unknown' else '' }}
+        onchange="toggleRule(this)"
+      >
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+
+<div class="text-center mt-4 mb-2">
+  <button class="btn btn-danger btn-lg w-100 mb-2" onclick="setAll('disable')">
+    <i class="bi bi-x-octagon-fill me-2"></i>Block All Kids Rules
+  </button>
+  <button class="btn btn-success btn-lg w-100" onclick="setAll('enable')">
+    <i class="bi bi-check-circle-fill me-2"></i>Allow All Kids Rules
+  </button>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const toast = new bootstrap.Toast(document.getElementById('actionToast'), { delay: 3000 });
+
+function showToast(msg, isError) {
+  const el = document.getElementById('actionToast');
+  el.className = `toast align-items-center border-0 text-bg-${isError ? 'danger' : 'success'}`;
+  document.getElementById('toastBody').textContent = msg;
+  toast.show();
+}
+
+async function toggleRule(checkbox) {
+  const rule = checkbox.dataset.rule;
+  const idx = checkbox.dataset.index;
+  const action = checkbox.checked ? 'enable' : 'disable';
+  const card = document.getElementById(`card-${idx}`);
+  const badge = document.getElementById(`badge-${idx}`);
+
+  checkbox.disabled = true;
+  const icon = checkbox.checked ? '⏳' : '⏳';
+
+  try {
+    const resp = await fetch(`/toggle/${encodeURIComponent(rule)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
+    const data = await resp.json();
+
+    if (resp.ok && data.success) {
+      const enabled = action === 'enable';
+      card.className = `card rule-card ${enabled ? 'enabled' : 'disabled'} mb-3`;
+      badge.className = `badge status-badge ${enabled ? 'enabled' : 'disabled'} mt-1`;
+      badge.textContent = enabled ? 'ALLOWED' : 'BLOCKED';
+      showToast(`${rule}: ${enabled ? 'Allowed ✓' : 'Blocked ✓'}`, false);
+    } else {
+      // Revert toggle on error
+      checkbox.checked = !checkbox.checked;
+      showToast(`Error: ${data.error || 'Unknown error'}`, true);
+    }
+  } catch (err) {
+    checkbox.checked = !checkbox.checked;
+    showToast(`Network error: ${err.message}`, true);
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
+async function setAll(action) {
+  const toggles = document.querySelectorAll('.rule-toggle:not([disabled])');
+  for (const toggle of toggles) {
+    const shouldBeChecked = action === 'enable';
+    if (toggle.checked !== shouldBeChecked) {
+      toggle.checked = shouldBeChecked;
+      await toggleRule(toggle);
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+}
+
+function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.querySelector('i').classList.add('spin');
+  setTimeout(() => { window.location.reload(); }, 200);
+}
+</script>
+{% endblock %}
