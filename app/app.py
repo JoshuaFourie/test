@@ -47,10 +47,23 @@ def _allowed_macs() -> list[str]:
         normalized = normalize_mac(os.environ.get(env_var, ""))
         if normalized:
             macs.append(normalized)
-    for mac in config.get("allowed_macs", []):
-        normalized = normalize_mac(mac)
-        if normalized and normalized not in macs:
-            macs.append(normalized)
+
+    # Check allowed_macs first
+    allowed_macs = config.get("allowed_macs", [])
+    if allowed_macs:
+        for mac in allowed_macs:
+            normalized = normalize_mac(mac)
+            if normalized and normalized not in macs:
+                macs.append(normalized)
+    else:
+        # Fallback to parent_devices if allowed_macs is not set
+        parent_devices = config.get("parent_devices", [])
+        for device in parent_devices:
+            mac = device.get("mac", "")
+            normalized = normalize_mac(mac)
+            if normalized and normalized not in macs:
+                macs.append(normalized)
+
     return macs
 
 
@@ -272,6 +285,12 @@ def settings():
         fw_error = str(e)
 
     stored_macs: list[str] = config.get("allowed_macs", [])
+
+    # If no allowed_macs, try to get from parent_devices
+    if not stored_macs:
+        parent_devices = config.get("parent_devices", [])
+        stored_macs = [d.get("mac", "") for d in parent_devices if d.get("mac")]
+
     my_mac_stored = stored_macs[0] if len(stored_macs) > 0 else ""
     wife_mac_stored = stored_macs[1] if len(stored_macs) > 1 else ""
 

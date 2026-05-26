@@ -3,15 +3,48 @@
 
 {% block content %}
 
-<!-- Parent Devices -->
+<!-- MAC Authentication -->
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
-    <i class="bi bi-phone-fill text-primary"></i>
-    <strong>Authorized Devices</strong>
+    <i class="bi bi-shield-lock text-success"></i>
+    <strong>Access Control (Parent Device MACs)</strong>
   </div>
   <div class="card-body">
     <p class="text-secondary small mb-3">
-      Add devices that can access this app. Only MACs in this list (or .env) are allowed.
+      Enter your device MAC addresses to enable access to this app. Only authenticated devices can use it.
+    </p>
+    <form method="POST">
+      <input type="hidden" name="action" value="update_macs">
+      <div class="mb-3">
+        <label for="my_mac" class="form-label">Your Device MAC</label>
+        <input type="text" class="form-control font-monospace" id="my_mac" name="my_mac"
+               placeholder="AA:BB:CC:DD:EE:FF" value="{{ my_mac_stored or '' }}"
+               pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$">
+        <small class="text-muted">MAC address of your primary device</small>
+      </div>
+      <div class="mb-3">
+        <label for="wife_mac" class="form-label">Partner/Family Device MAC</label>
+        <input type="text" class="form-control font-monospace" id="wife_mac" name="wife_mac"
+               placeholder="AA:BB:CC:DD:EE:FF" value="{{ wife_mac_stored or '' }}"
+               pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$">
+        <small class="text-muted">MAC address of partner/family member device (optional)</small>
+      </div>
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-save me-2"></i>Save MAC Addresses
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Parent Devices (Legacy) -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-phone-fill text-primary"></i>
+    <strong>Authorized Devices (Reference)</strong>
+  </div>
+  <div class="card-body">
+    <p class="text-secondary small mb-3">
+      Informational list of all devices. For access control, use the MAC Authentication section above.
     </p>
 
     <!-- List of devices -->
