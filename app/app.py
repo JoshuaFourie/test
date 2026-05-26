@@ -102,6 +102,13 @@ def require_mac_auth(f):
     return wrapper
 
 
+def _get_managed_rules() -> list[str]:
+    rules = config.get("managed_rules", [])
+    if not rules:
+        rules = config.get("kid_rules", [])
+    return rules
+
+
 def _is_setup_complete() -> bool:
     return bool(
         os.environ.get("XG_HOST") or config.get("xg_host")
@@ -142,7 +149,7 @@ def index():
     if not _is_setup_complete():
         return redirect(url_for("setup"))
 
-    managed_rules: list[str] = config.get("managed_rules", [])
+    managed_rules: list[str] = _get_managed_rules()
     rule_statuses: dict = {}
     error: str | None = None
 
@@ -168,7 +175,7 @@ def index():
 @app.route("/toggle/<path:rule_name>", methods=["POST"])
 @require_mac_auth
 def toggle_rule(rule_name: str):
-    managed_rules: list[str] = config.get("managed_rules", [])
+    managed_rules: list[str] = _get_managed_rules()
     logger.debug(f"Toggle request for '{rule_name}'. Managed rules: {managed_rules}")
 
     if rule_name not in managed_rules:
@@ -252,7 +259,7 @@ def settings():
         elif action == "add_rule":
             name = request.form.get("rule_name", "").strip()
             if name:
-                rules: list[str] = config.get("managed_rules", [])
+                rules: list[str] = _get_managed_rules()
                 if name not in rules:
                     rules.append(name)
                     config.set("managed_rules", rules)
@@ -262,7 +269,7 @@ def settings():
 
         elif action == "remove_rule":
             name = request.form.get("rule_name", "").strip()
-            rules = config.get("managed_rules", [])
+            rules = _get_managed_rules()
             if name in rules:
                 rules.remove(name)
                 config.set("managed_rules", rules)
@@ -306,7 +313,7 @@ def settings():
 
     return render_template(
         "settings.html",
-        managed_rules=config.get("managed_rules", []),
+        managed_rules=_get_managed_rules(),
         all_rules=all_rules,
         fw_error=fw_error,
         authorized_devices=authorized_devices,
@@ -330,7 +337,7 @@ def export_config():
             "password": "***ENCRYPTED***",
         },
         "authorized_devices": config.get("authorized_devices", []),
-        "managed_rules": config.get("managed_rules", []),
+        "managed_rules": _get_managed_rules(),
     }
     return jsonify(export_data)
 
@@ -354,7 +361,7 @@ def import_config():
         if devices:
             config.set("authorized_devices", devices)
 
-        rules = data.get("managed_rules", [])
+        rules = data.get("managed_rules", []) or data.get("kid_rules", [])
         if rules:
             config.set("managed_rules", rules)
 
