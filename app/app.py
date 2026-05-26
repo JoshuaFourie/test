@@ -330,6 +330,7 @@ def export_config():
             "password": "***ENCRYPTED***",
         },
         "parent_devices": config.get("parent_devices", []),
+        "kid_rules": config.get("kid_rules", []),
     }
     return jsonify(export_data)
 
@@ -352,6 +353,10 @@ def import_config():
         devices = data.get("parent_devices", [])
         if devices:
             config.set("parent_devices", devices)
+
+        rules = data.get("kid_rules", [])
+        if rules:
+            config.set("kid_rules", rules)
 
         return jsonify({"success": True, "message": "Config imported successfully"})
     except Exception as e:
