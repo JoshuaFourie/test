@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Initial Setup - XG Firewall Control{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8">
+    <div class="card shadow-lg">
+      <div class="card-header text-center py-4">
+        <h3 class="mb-0">
+          <i class="bi bi-gear-fill me-2"></i>Initial Setup
+        </h3>
+        <p class="text-muted small mt-2 mb-0">Configure your Sophos XG firewall connection</p>
+      </div>
+
+      <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('setup') }}">
+          <div class="mb-3">
+            <label for="xg_host" class="form-label">Firewall IP Address <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="xg_host" name="xg_host"
+                   placeholder="e.g., 192.168.1.1" required>
+            <small class="text-muted">IP address of your Sophos XG firewall admin interface</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="xg_port" class="form-label">Admin Port</label>
+            <input type="text" class="form-control" id="xg_port" name="xg_port"
+                   placeholder="4444" value="4444">
+            <small class="text-muted">Default is 4444 for HTTPS</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="xg_username" class="form-label">Admin Username <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="xg_username" name="xg_username"
+                   placeholder="e.g., admin" required>
+            <small class="text-muted">Must have API access enabled</small>
+          </div>
+
+          <div class="mb-4">
+            <label for="xg_password" class="form-label">Admin Password <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="xg_password" name="xg_password"
+                   placeholder="Your password" required>
+            <small class="text-muted">Will be encrypted and stored securely</small>
+          </div>
+
+          <div class="alert alert-info" role="alert">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Note:</strong> Your credentials will be encrypted and saved to the /data drive.
+            You can edit them later in Settings.
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 btn-lg">
+            <i class="bi bi-check-circle me-2"></i>Continue Setup
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .form-label { font-weight: 500; color: #e0e0e0; }
+  .form-control { background: #0d1117; border: 1px solid #30363d; color: #e0e0e0; }
+  .form-control:focus { background: #0d1117; border-color: #58a6ff; color: #e0e0e0; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1); }
+  .form-control::placeholder { color: #6e7681; }
+  .btn-primary { background: #238636; border: none; }
+  .btn-primary:hover { background: #2ea043; }
+</style>
+{% endblock %}

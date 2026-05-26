@@ -3,37 +3,60 @@
 
 {% block content %}
 
-<!-- MAC Authentication -->
+<!-- Parent Devices -->
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-phone-fill text-primary"></i>
-    <strong>Parent Phones (Access Control)</strong>
+    <strong>Authorized Devices</strong>
   </div>
   <div class="card-body">
     <p class="text-secondary small mb-3">
-      Only requests from these MAC addresses can access this app.
-      Leave blank to rely on the <code>.env</code> file values.
+      Add devices that can access this app. Only MACs in this list (or .env) are allowed.
     </p>
+
+    <!-- List of devices -->
+    {% if parent_devices %}
+    <ul class="list-group list-group-flush mb-3">
+      {% for device in parent_devices %}
+      <li class="list-group-item d-flex justify-content-between align-items-center"
+          style="background:transparent; border-color:#30363d;">
+        <div class="small">
+          <div><strong>{{ device.name }}</strong></div>
+          <div class="font-monospace text-muted">{{ device.mac }}</div>
+        </div>
+        <form method="POST" class="mb-0">
+          <input type="hidden" name="action" value="remove_device">
+          <input type="hidden" name="device_name" value="{{ device.name }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-secondary small mb-3">No devices added yet.</p>
+    {% endif %}
+
+    <!-- Add new device -->
     <form method="POST">
-      <input type="hidden" name="action" value="update_macs">
-      <div class="mb-3">
-        <label class="form-label">My Phone MAC</label>
-        <input type="text" class="form-control font-monospace"
-               name="my_mac" value="{{ my_mac }}"
-               placeholder="AA:BB:CC:DD:EE:FF"
-               pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$">
-        <div class="form-text">Find this in your phone's Wi-Fi settings.</div>
+      <input type="hidden" name="action" value="add_device">
+      <div class="row gap-2">
+        <div class="col">
+          <input type="text" class="form-control form-control-sm" name="device_name"
+                 placeholder="Device name (e.g., My Phone)" required>
+        </div>
+        <div class="col">
+          <input type="text" class="form-control form-control-sm font-monospace"
+                 name="device_mac" placeholder="MAC (AA:BB:CC:DD:EE:FF)"
+                 pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$" required>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-sm btn-success">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+        </div>
       </div>
-      <div class="mb-3">
-        <label class="form-label">Wife's Phone MAC</label>
-        <input type="text" class="form-control font-monospace"
-               name="wife_mac" value="{{ wife_mac }}"
-               placeholder="AA:BB:CC:DD:EE:FF"
-               pattern="^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$">
-      </div>
-      <button type="submit" class="btn btn-primary w-100">
-        <i class="bi bi-save me-2"></i>Save MAC Addresses
-      </button>
     </form>
   </div>
 </div>
@@ -42,7 +65,7 @@
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-list-check text-success"></i>
-    <strong>Managed Kids Rules</strong>
+    <strong>Managed Rules</strong>
   </div>
   <div class="card-body">
 
@@ -111,25 +134,163 @@
   </div>
 </div>
 
-<!-- Connection info (read-only) -->
+<!-- Firewall Connection -->
 <div class="card mb-4">
-  <div class="card-header d-flex align-items-center gap-2">
-    <i class="bi bi-hdd-network text-warning"></i>
-    <strong>Firewall Connection</strong>
+  <div class="card-header d-flex align-items-center justify-content-between gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-hdd-network text-warning"></i>
+      <div>
+        <strong>Firewall Connection</strong>
+        {% if xg_host %}
+        <div class="small text-success ms-2" style="display: inline;">
+          <i class="bi bi-check-circle"></i> Configured
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" onclick="toggleFWForm()">
+      <i class="bi bi-pencil"></i> {% if xg_host %}Edit{% else %}Configure{% endif %}
+    </button>
   </div>
+
   <div class="card-body">
-    <p class="text-secondary small mb-2">
-      Connection details are set via the <code>.env</code> file / environment variables.
-    </p>
-    <table class="table table-sm table-borderless text-secondary small mb-0">
-      <tr><td>XG_HOST</td><td class="font-monospace">{{ config.get('xg_host') or '(from .env)' }}</td></tr>
-      <tr><td>XG_PORT</td><td class="font-monospace">{{ config.get('xg_port') or '(from .env)' }}</td></tr>
-      <tr><td>XG_USERNAME</td><td class="font-monospace">{{ config.get('xg_user') or '(from .env)' }}</td></tr>
-    </table>
-    <a href="/api/rules" class="btn btn-sm btn-outline-secondary mt-2" target="_blank">
-      <i class="bi bi-list-ul me-1"></i>List all firewall rules (JSON)
-    </a>
+    <!-- Status view (shown by default if configured) -->
+    {% if xg_host %}
+    <div id="fw-status">
+      <div class="mb-3">
+        <small class="text-secondary">Firewall Name</small>
+        <div class="h6">{{ fw_name or 'Unnamed Firewall' }}</div>
+      </div>
+      <div class="mb-3">
+        <small class="text-secondary">Connection</small>
+        <div class="font-monospace small">{{ xg_host }}:{{ xg_port }}</div>
+      </div>
+      <a href="/api/rules" class="btn btn-sm btn-outline-secondary w-100" target="_blank">
+        <i class="bi bi-list-ul me-1"></i>List firewall rules (JSON)
+      </a>
+    </div>
+    {% endif %}
+
+    <!-- Edit form (hidden by default if configured) -->
+    <form method="POST" id="fw-form" {% if xg_host %}style="display: none;"{% endif %}>
+      <input type="hidden" name="action" value="update_firewall">
+
+      <div class="mb-3">
+        <label for="fw_name" class="form-label">Firewall Name</label>
+        <input type="text" class="form-control" id="fw_name" name="fw_name"
+               value="{{ fw_name or '' }}" placeholder="e.g., Home Firewall">
+      </div>
+
+      <div class="mb-3">
+        <label for="xg_host" class="form-label">IP Address <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="xg_host" name="xg_host"
+               value="{{ xg_host }}" placeholder="192.168.1.1" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="xg_port" class="form-label">Admin Port</label>
+        <input type="text" class="form-control" id="xg_port" name="xg_port"
+               value="{{ xg_port }}" placeholder="4444">
+      </div>
+
+      <div class="mb-3">
+        <label for="xg_username" class="form-label">Username <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="xg_username" name="xg_username"
+               value="{{ xg_username }}" placeholder="admin" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="xg_password" class="form-label">Password <span class="text-danger">*</span></label>
+        <input type="password" class="form-control" id="xg_password" name="xg_password"
+               placeholder="Enter password" {% if not xg_host %}required{% endif %}>
+        {% if xg_host %}<small class="text-muted">Leave blank to keep current password</small>{% endif %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">
+          <i class="bi bi-save me-2"></i>Save
+        </button>
+        <button type="button" class="btn btn-outline-secondary" onclick="toggleFWForm()">
+          Cancel
+        </button>
+      </div>
+    </form>
   </div>
 </div>
+
+<!-- Backup & Restore -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-cloud-check text-info"></i>
+    <strong>Backup & Restore</strong>
+  </div>
+  <div class="card-body">
+    <p class="text-secondary small mb-3">
+      Export your configuration for backup. Passwords are masked for security.
+    </p>
+    <div class="d-flex gap-2">
+      <button class="btn btn-info btn-sm" onclick="exportConfig()">
+        <i class="bi bi-download me-1"></i>Export Config
+      </button>
+      <button class="btn btn-info btn-sm" onclick="document.getElementById('importFile').click()">
+        <i class="bi bi-upload me-1"></i>Import Config
+      </button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importConfig(event)">
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleFWForm() {
+  const form = document.getElementById('fw-form');
+  const status = document.getElementById('fw-status');
+  if (form) {
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    if (status) status.style.display = status.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+function exportConfig() {
+  fetch('/export-config')
+    .then(r => r.json())
+    .then(data => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `xg-config-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+    });
+}
+
+function importConfig(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      fetch('/import-config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      })
+      .then(r => r.json())
+      .then(result => {
+        if (result.success) {
+          alert('Config imported! Refresh the page to see changes.');
+          location.reload();
+        } else {
+          alert('Error: ' + result.error);
+        }
+      });
+    } catch (err) {
+      alert('Invalid JSON file');
+    }
+  };
+  reader.readAsText(file);
+}
+</script>
 
 {% endblock %}

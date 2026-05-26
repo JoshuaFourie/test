@@ -19,7 +19,7 @@ from config import ConfigManager
 load_dotenv()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -34,16 +34,16 @@ config = ConfigManager("/data/config.json")
 
 def _api() -> SophosXGAPI:
     return SophosXGAPI(
-        host=os.environ.get("XG_HOST", ""),
-        port=int(os.environ.get("XG_PORT", "4444")),
-        username=os.environ.get("XG_USERNAME", ""),
-        password=os.environ.get("XG_PASSWORD", ""),
+        host=os.environ.get("XG_HOST") or config.get("xg_host", ""),
+        port=int(os.environ.get("XG_PORT") or config.get("xg_port", "4444")),
+        username=os.environ.get("XG_USERNAME") or config.get("xg_username", ""),
+        password=os.environ.get("XG_PASSWORD") or config.get("xg_password", ""),
     )
 
 
 def _allowed_macs() -> list[str]:
     macs: list[str] = []
-    for env_var in ("MY_MAC", "WIFE_MAC"):
+    for env_var in ("MY_MAC", "WIFE_MAC", "PC_MAC"):
         normalized = normalize_mac(os.environ.get(env_var, ""))
         if normalized:
             macs.append(normalized)
@@ -89,11 +89,46 @@ def require_mac_auth(f):
     return wrapper
 
 
+def _is_setup_complete() -> bool:
+    return bool(
+        os.environ.get("XG_HOST") or config.get("xg_host")
+    ) and bool(
+        os.environ.get("XG_USERNAME") or config.get("xg_username")
+    )
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    if _is_setup_complete() and request.method == "GET":
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        xg_host = request.form.get("xg_host", "").strip()
+        xg_port = request.form.get("xg_port", "4444").strip()
+        xg_username = request.form.get("xg_username", "").strip()
+        xg_password = request.form.get("xg_password", "").strip()
+
+        if xg_host and xg_username and xg_password:
+            config.set("xg_host", xg_host)
+            config.set("xg_port", xg_port)
+            config.set("xg_username", xg_username)
+            config.set("xg_password", xg_password)
+            flash("Firewall credentials saved successfully!", "success")
+            return redirect(url_for("index"))
+        else:
+            flash("Please fill in all firewall fields.", "error")
+
+    return render_template("setup.html")
+
 
 @app.route("/")
 @require_mac_auth
 def index():
+    if not _is_setup_complete():
+        return redirect(url_for("setup"))
+
     kid_rules: list[str] = config.get("kid_rules", [])
     rule_statuses: dict = {}
     error: str | None = None
@@ -121,13 +156,19 @@ def index():
 @require_mac_auth
 def toggle_rule(rule_name: str):
     kid_rules: list[str] = config.get("kid_rules", [])
+    logger.debug(f"Toggle request for '{rule_name}'. Managed rules: {kid_rules}")
+
     if rule_name not in kid_rules:
-        return jsonify({"error": "Rule not in managed list"}), 404
+        logger.error(f"Rule '{rule_name}' not in managed list")
+        return jsonify({"error": f"Rule '{rule_name}' not in managed list"}), 404
 
     data = request.get_json(silent=True) or {}
     action = data.get("action")
+    logger.debug(f"Action received: '{action}' (type: {type(action)})")
+
     if action not in ("enable", "disable"):
-        return jsonify({"error": "action must be enable or disable"}), 400
+        logger.error(f"Invalid action: '{action}'")
+        return jsonify({"error": f"Invalid action '{action}'. Must be 'enable' or 'disable'"}), 400
 
     try:
         _api().set_rule_status(rule_name, action == "enable")
@@ -135,7 +176,9 @@ def toggle_rule(rule_name: str):
         return jsonify({"success": True, "rule": rule_name, "status": action})
     except SophosAPIError as e:
         logger.error(f"Toggle failed for '{rule_name}': {e}")
-        return jsonify({"error": str(e)}), 502
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": f"Firewall error: {str(e)}"}), 400
 
 
 @app.route("/api/rules")
@@ -153,7 +196,47 @@ def settings():
     if request.method == "POST":
         action = request.form.get("action", "")
 
-        if action == "add_rule":
+        if action == "add_device":
+            device_name = request.form.get("device_name", "").strip()
+            device_mac = normalize_mac(request.form.get("device_mac", ""))
+            if device_name and device_mac:
+                devices = config.get("parent_devices", [])
+                if not any(d.get("name") == device_name for d in devices):
+                    devices.append({"name": device_name, "mac": device_mac})
+                    config.set("parent_devices", devices)
+                    flash(f'Device "{device_name}" added.', "success")
+                else:
+                    flash(f'Device "{device_name}" already exists.', "warning")
+            else:
+                flash("Please fill in device name and MAC.", "error")
+
+        elif action == "remove_device":
+            device_name = request.form.get("device_name", "").strip()
+            devices = config.get("parent_devices", [])
+            devices = [d for d in devices if d.get("name") != device_name]
+            config.set("parent_devices", devices)
+            flash(f'Device "{device_name}" removed.', "success")
+
+        elif action == "update_firewall":
+            xg_host = request.form.get("xg_host", "").strip()
+            xg_port = request.form.get("xg_port", "4444").strip()
+            xg_username = request.form.get("xg_username", "").strip()
+            xg_password = request.form.get("xg_password", "").strip()
+            fw_name = request.form.get("fw_name", "").strip()
+
+            if xg_host and xg_username:
+                config.set("xg_host", xg_host)
+                config.set("xg_port", xg_port)
+                config.set("xg_username", xg_username)
+                if xg_password:
+                    config.set("xg_password", xg_password)
+                if fw_name:
+                    config.set("fw_name", fw_name)
+                flash("Firewall settings updated.", "success")
+            else:
+                flash("Please fill in firewall IP and username.", "error")
+
+        elif action == "add_rule":
             name = request.form.get("rule_name", "").strip()
             if name:
                 rules: list[str] = config.get("kid_rules", [])
@@ -192,14 +275,68 @@ def settings():
     my_mac_stored = stored_macs[0] if len(stored_macs) > 0 else ""
     wife_mac_stored = stored_macs[1] if len(stored_macs) > 1 else ""
 
+    xg_host = os.environ.get("XG_HOST") or config.get("xg_host", "")
+    xg_port = os.environ.get("XG_PORT") or config.get("xg_port", "4444")
+    xg_username = os.environ.get("XG_USERNAME") or config.get("xg_username", "")
+    xg_password = os.environ.get("XG_PASSWORD") or config.get("xg_password", "")
+    fw_name = config.get("fw_name", "")
+
+    parent_devices = config.get("parent_devices", [])
+    for device in parent_devices:
+        device["mac"] = normalize_mac(device.get("mac", ""))
+
     return render_template(
         "settings.html",
         kid_rules=config.get("kid_rules", []),
         all_rules=all_rules,
         fw_error=fw_error,
-        my_mac=my_mac_stored or os.environ.get("MY_MAC", ""),
-        wife_mac=wife_mac_stored or os.environ.get("WIFE_MAC", ""),
+        parent_devices=parent_devices,
+        xg_host=xg_host,
+        xg_port=xg_port,
+        xg_username=xg_username,
+        xg_password=xg_password,
+        fw_name=fw_name,
     )
+
+
+@app.route("/export-config")
+@require_mac_auth
+def export_config():
+    export_data = {
+        "firewall": {
+            "name": config.get("fw_name", ""),
+            "host": config.get("xg_host", ""),
+            "port": config.get("xg_port", "4444"),
+            "username": config.get("xg_username", ""),
+            "password": "***ENCRYPTED***",
+        },
+        "parent_devices": config.get("parent_devices", []),
+    }
+    return jsonify(export_data)
+
+
+@app.route("/import-config", methods=["POST"])
+@require_mac_auth
+def import_config():
+    try:
+        data = request.get_json() or {}
+        fw = data.get("firewall", {})
+
+        if fw.get("host") and fw.get("username"):
+            config.set("fw_name", fw.get("name", ""))
+            config.set("xg_host", fw.get("host", ""))
+            config.set("xg_port", fw.get("port", "4444"))
+            config.set("xg_username", fw.get("username", ""))
+            if fw.get("password") and fw.get("password") != "***ENCRYPTED***":
+                config.set("xg_password", fw.get("password", ""))
+
+        devices = data.get("parent_devices", [])
+        if devices:
+            config.set("parent_devices", devices)
+
+        return jsonify({"success": True, "message": "Config imported successfully"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
 
 @app.route("/health")
@@ -208,4 +345,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=9000, debug=False)

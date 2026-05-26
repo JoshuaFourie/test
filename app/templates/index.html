@@ -7,7 +7,7 @@
 <div class="alert alert-setup mb-4">
   <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
   <strong>Setup mode</strong> — No MAC addresses configured yet.
-  Go to <a href="/settings" class="alert-link">Settings</a> to add your phone MACs and create kid rules.
+  Go to <a href="/settings" class="alert-link">Settings</a> to add your authorized devices and manage rules.
 </div>
 {% endif %}
 
@@ -20,7 +20,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h5 class="mb-0 text-secondary fw-semibold">
-    <i class="bi bi-toggles me-2"></i>Kids Rules
+    <i class="bi bi-toggles me-2"></i>Rules
   </h5>
   <button class="btn btn-sm btn-outline-secondary" id="refreshBtn" onclick="refreshAll()">
     <i class="bi bi-arrow-clockwise"></i>
@@ -33,7 +33,7 @@
     <i class="bi bi-list-ul display-4 text-secondary mb-3 d-block"></i>
     <p class="text-secondary mb-3">No rules configured yet.</p>
     <a href="/settings" class="btn btn-primary">
-      <i class="bi bi-gear-fill me-2"></i>Add Rules in Settings
+      <i class="bi bi-gear-fill me-2"></i>Manage Rules in Settings
     </a>
   </div>
 </div>
@@ -51,7 +51,7 @@
         <div class="text-secondary small">{{ rule.description }}</div>
       {% endif %}
       <span class="badge status-badge {{ status_cls }} mt-1" id="badge-{{ loop.index }}">
-        {{ 'ALLOWED' if is_enabled else ('BLOCKED' if rule.status | lower == 'disable' else 'UNKNOWN') }}
+        {{ 'ENABLED' if is_enabled else ('DISABLED' if rule.status | lower == 'disable' else 'UNKNOWN') }}
       </span>
     </div>
     <div class="form-check form-switch mb-0 d-flex align-items-center">
@@ -74,10 +74,10 @@
 
 <div class="text-center mt-4 mb-2">
   <button class="btn btn-danger btn-lg w-100 mb-2" onclick="setAll('disable')">
-    <i class="bi bi-x-octagon-fill me-2"></i>Block All Kids Rules
+    <i class="bi bi-x-octagon-fill me-2"></i>Disable All Rules
   </button>
   <button class="btn btn-success btn-lg w-100" onclick="setAll('enable')">
-    <i class="bi bi-check-circle-fill me-2"></i>Allow All Kids Rules
+    <i class="bi bi-check-circle-fill me-2"></i>Enable All Rules
   </button>
 </div>
 {% endif %}
@@ -117,8 +117,8 @@ async function toggleRule(checkbox) {
       const enabled = action === 'enable';
       card.className = `card rule-card ${enabled ? 'enabled' : 'disabled'} mb-3`;
       badge.className = `badge status-badge ${enabled ? 'enabled' : 'disabled'} mt-1`;
-      badge.textContent = enabled ? 'ALLOWED' : 'BLOCKED';
-      showToast(`${rule}: ${enabled ? 'Allowed ✓' : 'Blocked ✓'}`, false);
+      badge.textContent = enabled ? 'ENABLED' : 'DISABLED';
+      showToast(`${rule}: ${enabled ? 'Enabled ✓' : 'Disabled ✓'}`, false);
     } else {
       // Revert toggle on error
       checkbox.checked = !checkbox.checked;
