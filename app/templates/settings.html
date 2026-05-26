@@ -7,7 +7,7 @@
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-shield-lock text-success"></i>
-    <strong>Access Control (Parent Device MACs)</strong>
+    <strong>Access Control (Authorized Device MACs)</strong>
   </div>
   <div class="card-body">
     <p class="text-secondary small mb-3">
@@ -48,9 +48,9 @@
     </p>
 
     <!-- List of devices -->
-    {% if parent_devices %}
+    {% if authorized_devices %}
     <ul class="list-group list-group-flush mb-3">
-      {% for device in parent_devices %}
+      {% for device in authorized_devices %}
       <li class="list-group-item d-flex justify-content-between align-items-center"
           style="background:transparent; border-color:#30363d;">
         <div class="small">
@@ -111,9 +111,9 @@
     {% endif %}
 
     <!-- Existing managed rules -->
-    {% if kid_rules %}
+    {% if managed_rules %}
     <ul class="list-group list-group-flush mb-3">
-      {% for rule in kid_rules %}
+      {% for rule in managed_rules %}
       <li class="list-group-item d-flex justify-content-between align-items-center"
           style="background:transparent; border-color:#30363d;">
         <span class="font-monospace small">{{ rule }}</span>
@@ -140,7 +140,7 @@
         <select name="rule_name" class="form-select form-select-sm font-monospace">
           <option value="">— pick a rule —</option>
           {% for rule in all_rules | sort(attribute='name') %}
-            {% if rule.name not in kid_rules %}
+            {% if rule.name not in managed_rules %}
             <option value="{{ rule.name }}">{{ rule.name }}</option>
             {% endif %}
           {% endfor %}

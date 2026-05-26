@@ -56,9 +56,9 @@ def _allowed_macs() -> list[str]:
             if normalized and normalized not in macs:
                 macs.append(normalized)
     else:
-        # Fallback to parent_devices if allowed_macs is not set
-        parent_devices = config.get("parent_devices", [])
-        for device in parent_devices:
+        # Fallback to authorized_devices if allowed_macs is not set
+        authorized_devices = config.get("authorized_devices", [])
+        for device in authorized_devices:
             mac = device.get("mac", "")
             normalized = normalize_mac(mac)
             if normalized and normalized not in macs:
@@ -142,15 +142,15 @@ def index():
     if not _is_setup_complete():
         return redirect(url_for("setup"))
 
-    kid_rules: list[str] = config.get("kid_rules", [])
+    managed_rules: list[str] = config.get("managed_rules", [])
     rule_statuses: dict = {}
     error: str | None = None
 
-    if kid_rules:
+    if managed_rules:
         try:
             all_rules = _api().get_firewall_rules()
             by_name = {r["name"]: r for r in all_rules}
-            for name in kid_rules:
+            for name in managed_rules:
                 rule_statuses[name] = by_name.get(name, {"name": name, "status": "unknown"})
         except SophosAPIError as e:
             error = str(e)
@@ -158,7 +158,7 @@ def index():
 
     return render_template(
         "index.html",
-        kid_rules=kid_rules,
+        managed_rules=managed_rules,
         rule_statuses=rule_statuses,
         error=error,
         setup_mode=not _allowed_macs(),
@@ -168,10 +168,10 @@ def index():
 @app.route("/toggle/<path:rule_name>", methods=["POST"])
 @require_mac_auth
 def toggle_rule(rule_name: str):
-    kid_rules: list[str] = config.get("kid_rules", [])
-    logger.debug(f"Toggle request for '{rule_name}'. Managed rules: {kid_rules}")
+    managed_rules: list[str] = config.get("managed_rules", [])
+    logger.debug(f"Toggle request for '{rule_name}'. Managed rules: {managed_rules}")
 
-    if rule_name not in kid_rules:
+    if rule_name not in managed_rules:
         logger.error(f"Rule '{rule_name}' not in managed list")
         return jsonify({"error": f"Rule '{rule_name}' not in managed list"}), 404
 
@@ -213,10 +213,10 @@ def settings():
             device_name = request.form.get("device_name", "").strip()
             device_mac = normalize_mac(request.form.get("device_mac", ""))
             if device_name and device_mac:
-                devices = config.get("parent_devices", [])
+                devices = config.get("authorized_devices", [])
                 if not any(d.get("name") == device_name for d in devices):
                     devices.append({"name": device_name, "mac": device_mac})
-                    config.set("parent_devices", devices)
+                    config.set("authorized_devices", devices)
                     flash(f'Device "{device_name}" added.', "success")
                 else:
                     flash(f'Device "{device_name}" already exists.', "warning")
@@ -225,9 +225,9 @@ def settings():
 
         elif action == "remove_device":
             device_name = request.form.get("device_name", "").strip()
-            devices = config.get("parent_devices", [])
+            devices = config.get("authorized_devices", [])
             devices = [d for d in devices if d.get("name") != device_name]
-            config.set("parent_devices", devices)
+            config.set("authorized_devices", devices)
             flash(f'Device "{device_name}" removed.', "success")
 
         elif action == "update_firewall":
@@ -252,20 +252,20 @@ def settings():
         elif action == "add_rule":
             name = request.form.get("rule_name", "").strip()
             if name:
-                rules: list[str] = config.get("kid_rules", [])
+                rules: list[str] = config.get("managed_rules", [])
                 if name not in rules:
                     rules.append(name)
-                    config.set("kid_rules", rules)
+                    config.set("managed_rules", rules)
                     flash(f'Rule "{name}" added to managed list.', "success")
                 else:
                     flash(f'Rule "{name}" is already in the list.', "warning")
 
         elif action == "remove_rule":
             name = request.form.get("rule_name", "").strip()
-            rules = config.get("kid_rules", [])
+            rules = config.get("managed_rules", [])
             if name in rules:
                 rules.remove(name)
-                config.set("kid_rules", rules)
+                config.set("managed_rules", rules)
                 flash(f'Rule "{name}" removed.', "success")
 
         elif action == "update_macs":
@@ -286,10 +286,10 @@ def settings():
 
     stored_macs: list[str] = config.get("allowed_macs", [])
 
-    # If no allowed_macs, try to get from parent_devices
+    # If no allowed_macs, try to get from authorized_devices
     if not stored_macs:
-        parent_devices = config.get("parent_devices", [])
-        stored_macs = [d.get("mac", "") for d in parent_devices if d.get("mac")]
+        authorized_devices = config.get("authorized_devices", [])
+        stored_macs = [d.get("mac", "") for d in authorized_devices if d.get("mac")]
 
     my_mac_stored = stored_macs[0] if len(stored_macs) > 0 else ""
     wife_mac_stored = stored_macs[1] if len(stored_macs) > 1 else ""
@@ -300,16 +300,16 @@ def settings():
     xg_password = os.environ.get("XG_PASSWORD") or config.get("xg_password", "")
     fw_name = config.get("fw_name", "")
 
-    parent_devices = config.get("parent_devices", [])
-    for device in parent_devices:
+    authorized_devices = config.get("authorized_devices", [])
+    for device in authorized_devices:
         device["mac"] = normalize_mac(device.get("mac", ""))
 
     return render_template(
         "settings.html",
-        kid_rules=config.get("kid_rules", []),
+        managed_rules=config.get("managed_rules", []),
         all_rules=all_rules,
         fw_error=fw_error,
-        parent_devices=parent_devices,
+        authorized_devices=authorized_devices,
         xg_host=xg_host,
         xg_port=xg_port,
         xg_username=xg_username,
@@ -329,8 +329,8 @@ def export_config():
             "username": config.get("xg_username", ""),
             "password": "***ENCRYPTED***",
         },
-        "parent_devices": config.get("parent_devices", []),
-        "kid_rules": config.get("kid_rules", []),
+        "authorized_devices": config.get("authorized_devices", []),
+        "managed_rules": config.get("managed_rules", []),
     }
     return jsonify(export_data)
 
@@ -350,13 +350,13 @@ def import_config():
             if fw.get("password") and fw.get("password") != "***ENCRYPTED***":
                 config.set("xg_password", fw.get("password", ""))
 
-        devices = data.get("parent_devices", [])
+        devices = data.get("authorized_devices", [])
         if devices:
-            config.set("parent_devices", devices)
+            config.set("authorized_devices", devices)
 
-        rules = data.get("kid_rules", [])
+        rules = data.get("managed_rules", [])
         if rules:
-            config.set("kid_rules", rules)
+            config.set("managed_rules", rules)
 
         return jsonify({"success": True, "message": "Config imported successfully"})
     except Exception as e:

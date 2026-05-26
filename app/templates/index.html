@@ -27,7 +27,7 @@
   </button>
 </div>
 
-{% if not kid_rules %}
+{% if not managed_rules %}
 <div class="card text-center py-5">
   <div class="card-body">
     <i class="bi bi-list-ul display-4 text-secondary mb-3 d-block"></i>
@@ -39,7 +39,7 @@
 </div>
 {% else %}
 <div id="ruleList">
-{% for name in kid_rules %}
+{% for name in managed_rules %}
   {% set rule = rule_statuses.get(name, {'name': name, 'status': 'unknown'}) %}
   {% set is_enabled = rule.status | lower == 'enable' %}
   {% set status_cls = 'enabled' if is_enabled else ('disabled' if rule.status | lower == 'disable' else 'unknown') %}
