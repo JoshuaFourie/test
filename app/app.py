@@ -568,6 +568,11 @@ def service_worker():
     return resp
 
 
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(app.static_folder, "icon.svg", mimetype="image/svg+xml")
+
+
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify({"error": "Rate limit exceeded. Try again in a moment."}), 429
