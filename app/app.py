@@ -63,12 +63,23 @@ _api = SophosXGAPI(
 
 _rules_cache: list[dict] | None = None
 _rules_cache_ts: float = 0.0
-_RULES_CACHE_TTL: float = 10.0
+_RULES_CACHE_TTL: float = 60.0
+
+_allowed_macs_cache: list[str] | None = None
+_allowed_macs_cache_ts: float = 0.0
+_ALLOWED_MACS_CACHE_TTL: float = 30.0
+
+_mac_lookup_cache: dict[str, str] = {}
+_mac_lookup_cache_ts: dict[str, float] = {}
+_MAC_LOOKUP_CACHE_TTL: float = 300.0
 
 # SSE broadcast state — shared across threads within the single worker
 _sse_clients: list[queue.Queue] = []
 _sse_lock = threading.Lock()
 
+_activity_log_buffer: list[dict] = []
+_activity_log_flush_interval: float = 5.0
+_activity_log_last_flush: float = 0.0
 _MAX_LOG = 50
 
 
@@ -103,14 +114,37 @@ def _broadcast_rule_change(rule: str, status: str) -> None:
 
 
 def _log_activity(rule: str, action: str, by: str) -> None:
-    log: list = config.get("activity_log", [])
-    log.append({
+    global _activity_log_buffer, _activity_log_last_flush
+    _activity_log_buffer.append({
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "rule": rule,
         "action": action,
         "by": by,
     })
+    now = time.monotonic()
+    if len(_activity_log_buffer) >= 10 or (now - _activity_log_last_flush) > _activity_log_flush_interval:
+        _flush_activity_log()
+        _activity_log_last_flush = now
+
+
+def _flush_activity_log() -> None:
+    global _activity_log_buffer
+    if not _activity_log_buffer:
+        return
+    log: list = config.get("activity_log", [])
+    log.extend(_activity_log_buffer)
     config.set("activity_log", log[-_MAX_LOG:])
+    _activity_log_buffer = []
+
+
+def _get_allowed_macs_cached() -> list[str]:
+    global _allowed_macs_cache, _allowed_macs_cache_ts
+    now = time.monotonic()
+    if _allowed_macs_cache is not None and (now - _allowed_macs_cache_ts) < _ALLOWED_MACS_CACHE_TTL:
+        return _allowed_macs_cache
+    _allowed_macs_cache = _allowed_macs()
+    _allowed_macs_cache_ts = now
+    return _allowed_macs_cache
 
 
 def _allowed_macs() -> list[str]:
@@ -139,10 +173,23 @@ def _allowed_macs() -> list[str]:
     return macs
 
 
+def _get_cached_mac_for_ip(client_ip: str) -> str:
+    global _mac_lookup_cache, _mac_lookup_cache_ts
+    now = time.monotonic()
+    if client_ip in _mac_lookup_cache:
+        if (now - _mac_lookup_cache_ts.get(client_ip, 0)) < _MAC_LOOKUP_CACHE_TTL:
+            return _mac_lookup_cache[client_ip]
+
+    mac = normalize_mac(get_mac_for_ip(client_ip))
+    _mac_lookup_cache[client_ip] = mac
+    _mac_lookup_cache_ts[client_ip] = now
+    return mac
+
+
 def require_mac_auth(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        allowed = _allowed_macs()
+        allowed = _get_allowed_macs_cached()
 
         if not allowed:
             # No MACs configured yet — let through for initial setup
@@ -161,7 +208,7 @@ def require_mac_auth(f):
             session["client_mac"] = "localhost"
             return f(*args, **kwargs)
 
-        client_mac = normalize_mac(get_mac_for_ip(client_ip))
+        client_mac = _get_cached_mac_for_ip(client_ip)
         logger.info(f"Auth check — IP: {client_ip}  MAC: {client_mac}  Allowed: {allowed}")
 
         if client_mac and client_mac in allowed:
@@ -222,7 +269,7 @@ def index():
         return redirect(url_for("setup"))
 
     managed_rules: list[str] = _get_managed_rules()
-    allowed = _allowed_macs()
+    allowed = _get_allowed_macs_cached()
     rule_statuses: dict = {}
     error: str | None = None
 
@@ -284,7 +331,9 @@ def toggle_rule(rule_name: str):
 @require_mac_auth
 def api_rules():
     try:
-        return jsonify(_get_cached_rules())
+        resp = jsonify(_get_cached_rules())
+        resp.headers["Cache-Control"] = "max-age=60, must-revalidate"
+        return resp
     except SophosAPIError as e:
         return jsonify({"error": str(e)}), 502
 
@@ -506,6 +555,25 @@ def service_worker():
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify({"error": "Rate limit exceeded. Try again in a moment."}), 429
+
+
+@app.before_request
+def flush_activity_log_before_request():
+    global _activity_log_last_flush
+    now = time.monotonic()
+    if _activity_log_buffer and (now - _activity_log_last_flush) > _activity_log_flush_interval:
+        _flush_activity_log()
+        _activity_log_last_flush = now
+
+
+def shutdown_handler(signum=None, frame=None):
+    _flush_activity_log()
+
+
+import atexit
+import signal
+atexit.register(shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
 
 
 if __name__ == "__main__":

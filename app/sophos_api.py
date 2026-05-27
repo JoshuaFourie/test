@@ -50,15 +50,15 @@ class SophosXGAPI:
             raise SophosAPIError(f"Invalid XML response from firewall: {e}") from e
 
         full_response = ET.tostring(root, encoding="unicode")
-        print(f">>> FIREWALL RESPONSE: {full_response[:800]}", flush=True)
+        logger.debug(f"Firewall response: {full_response[:800]}")
 
         login_el = root.find("Login/status")
-        print(f">>> Login status: {login_el.text if login_el is not None else 'NOT FOUND'}", flush=True)
+        logger.debug(f"Login status: {login_el.text if login_el is not None else 'NOT FOUND'}")
 
         # Check for error messages
         for el in root.iter():
             if el.text and ("validation" in (el.text or "").lower() or "error" in (el.text or "").lower()):
-                print(f">>> Found error/validation element {el.tag}: {el.text}", flush=True)
+                logger.debug(f"Found error/validation element {el.tag}: {el.text}")
 
         if login_el is not None and "Successful" not in (login_el.text or ""):
             raise SophosAPIError(f"Authentication failed: {login_el.text}")
