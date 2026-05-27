@@ -4,6 +4,7 @@ import socket
 import threading
 import queue
 import logging
+import secrets
 from functools import wraps
 from flask import (
     Flask,
@@ -34,13 +35,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-_secret_key = os.environ.get("SECRET_KEY")
-if not _secret_key:
-    raise RuntimeError(
-        "SECRET_KEY is not set. Add it to your .env file.\n"
-        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
-    )
+_secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.secret_key = _secret_key
+logger.info(f"SECRET_KEY initialized (length: {len(_secret_key)})")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
