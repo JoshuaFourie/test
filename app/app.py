@@ -293,6 +293,17 @@ def index():
     )
 
 
+def _apply_with_logging(rule_name: str, action: str, by: str) -> None:
+    """Apply changes in background and log result"""
+    try:
+        _api._apply_changes()
+        _log_activity(rule_name, f"{action}_confirmed", by)
+        logger.info(f"Rule '{rule_name}' apply completed for {by}")
+    except Exception as e:
+        _log_activity(rule_name, f"{action}_failed", by)
+        logger.error(f"Apply failed for '{rule_name}': {e}")
+
+
 @app.route("/toggle/<path:rule_name>", methods=["POST"])
 @require_mac_auth
 @limiter.limit("10 per minute")
@@ -313,12 +324,20 @@ def toggle_rule(rule_name: str):
         return jsonify({"error": f"Invalid action '{action}'. Must be 'enable' or 'disable'"}), 400
 
     try:
-        _api.set_rule_status(rule_name, action == "enable")
-        _invalidate_rules_cache()
         by = session.get("client_mac", "unknown")
+        _api.set_rule_status(rule_name, action == "enable", apply_async=True)
+        _invalidate_rules_cache()
         _log_activity(rule_name, action, by)
         _broadcast_rule_change(rule_name, action)
-        logger.info(f"Rule '{rule_name}' set to {action} by {by}")
+        logger.info(f"Rule '{rule_name}' toggled to {action} by {by}, applying in background")
+
+        # Start background apply with logging
+        threading.Thread(
+            target=_apply_with_logging,
+            args=(rule_name, action, by),
+            daemon=True
+        ).start()
+
         return jsonify({"success": True, "rule": rule_name, "status": action})
     except SophosAPIError as e:
         logger.error(f"Toggle failed for '{rule_name}': {e}")

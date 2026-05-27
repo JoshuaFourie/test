@@ -133,7 +133,7 @@ class SophosXGAPI:
             logger.warning(f"Apply request failed: {e}, changes may require manual commit on firewall")
             return False
 
-    def set_rule_status(self, rule_name: str, enabled: bool) -> bool:
+    def set_rule_status(self, rule_name: str, enabled: bool, apply_async: bool = False) -> bool:
         status_value = "Enable" if enabled else "Disable"
 
         # Get the full rule to preserve all settings
@@ -173,8 +173,12 @@ class SophosXGAPI:
             logger.debug(f"Configuration status: code={status_code}, text={status_text}")
 
             if status_code == "200" or "success" in status_text:
-                # Apply the changes to make them active in the firewall
-                self._apply_changes()
+                # Apply changes (async or blocking)
+                if apply_async:
+                    import threading
+                    threading.Thread(target=self._apply_changes, daemon=True).start()
+                else:
+                    self._apply_changes()
                 return True
             else:
                 raise SophosAPIError(f"Firewall returned error: {status_code} {response_status.text}")
@@ -186,8 +190,12 @@ class SophosXGAPI:
 
         # If response has FirewallRule, operation succeeded
         if root.find("FirewallRule") is not None:
-            # Apply the changes to make them active in the firewall
-            self._apply_changes()
+            # Apply changes (async or blocking)
+            if apply_async:
+                import threading
+                threading.Thread(target=self._apply_changes, daemon=True).start()
+            else:
+                self._apply_changes()
             return True
 
         # No explicit error, assume success
