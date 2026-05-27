@@ -53,12 +53,12 @@ limiter = Limiter(
     default_limits=[],
 )
 
-# Module-level API singleton — env vars read once at startup
+# Module-level API singleton — fallback to config.json if env vars not set
 _api = SophosXGAPI(
-    host=os.environ.get("XG_HOST", ""),
-    port=int(os.environ.get("XG_PORT", "4444")),
-    username=os.environ.get("XG_USERNAME", ""),
-    password=os.environ.get("XG_PASSWORD", ""),
+    host=os.environ.get("XG_HOST") or config.get("xg_host", ""),
+    port=int(os.environ.get("XG_PORT") or config.get("xg_port", "4444")),
+    username=os.environ.get("XG_USERNAME") or config.get("xg_username", ""),
+    password=os.environ.get("XG_PASSWORD") or config.get("xg_password", ""),
 )
 
 _rules_cache: list[dict] | None = None
