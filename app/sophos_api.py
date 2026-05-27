@@ -1,5 +1,6 @@
 import requests
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils as saxutils
 import logging
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -75,7 +76,7 @@ class SophosXGAPI:
         status = "Enable" if enabled else "Disable"
         body = f"""<Set operation="update">
   <FirewallRule>
-    <Name>{rule_name}</Name>
+    <Name>{saxutils.escape(rule_name)}</Name>
     <Status>{status}</Status>
   </FirewallRule>
 </Set>"""

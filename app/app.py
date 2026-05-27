@@ -1,5 +1,6 @@
 import os
 import time
+import socket
 import logging
 from functools import wraps
 from flask import (
@@ -26,11 +27,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
+    raise RuntimeError(
+        "SECRET_KEY is not set. Add it to your .env file.\n"
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+app.secret_key = _secret_key
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 config = ConfigManager("/data/config.json")
+
+# Module-level singleton — avoids re-reading env vars on every request
+_api = SophosXGAPI(
+    host=os.environ.get("XG_HOST", ""),
+    port=int(os.environ.get("XG_PORT", "4444")),
+    username=os.environ.get("XG_USERNAME", ""),
+    password=os.environ.get("XG_PASSWORD", ""),
+)
 
 _rules_cache: list[dict] | None = None
 _rules_cache_ts: float = 0.0
@@ -42,7 +58,7 @@ def _get_cached_rules() -> list[dict]:
     now = time.monotonic()
     if _rules_cache is not None and (now - _rules_cache_ts) < _RULES_CACHE_TTL:
         return _rules_cache
-    rules = _api().get_firewall_rules()
+    rules = _api.get_firewall_rules()
     _rules_cache = rules
     _rules_cache_ts = now
     return rules
@@ -51,15 +67,6 @@ def _get_cached_rules() -> list[dict]:
 def _invalidate_rules_cache() -> None:
     global _rules_cache
     _rules_cache = None
-
-
-def _api() -> SophosXGAPI:
-    return SophosXGAPI(
-        host=os.environ.get("XG_HOST", ""),
-        port=int(os.environ.get("XG_PORT", "4444")),
-        username=os.environ.get("XG_USERNAME", ""),
-        password=os.environ.get("XG_PASSWORD", ""),
-    )
 
 
 def _allowed_macs() -> list[str]:
@@ -152,7 +159,7 @@ def toggle_rule(rule_name: str):
         return jsonify({"error": "action must be enable or disable"}), 400
 
     try:
-        _api().set_rule_status(rule_name, action == "enable")
+        _api.set_rule_status(rule_name, action == "enable")
         _invalidate_rules_cache()
         logger.info(f"Rule '{rule_name}' set to {action} by {session.get('client_mac')}")
         return jsonify({"success": True, "rule": rule_name, "status": action})
@@ -165,7 +172,7 @@ def toggle_rule(rule_name: str):
 @require_mac_auth
 def api_rules():
     try:
-        return jsonify(_api().get_firewall_rules())
+        return jsonify(_get_cached_rules())
     except SophosAPIError as e:
         return jsonify({"error": str(e)}), 502
 
@@ -207,7 +214,7 @@ def settings():
     all_rules: list[dict] = []
     fw_error: str | None = None
     try:
-        all_rules = _api().get_firewall_rules()
+        all_rules = _get_cached_rules()
     except SophosAPIError as e:
         fw_error = str(e)
 
@@ -227,6 +234,11 @@ def settings():
 
 @app.route("/health")
 def health():
+    try:
+        with socket.create_connection((_api.host, _api.port), timeout=3):
+            pass
+    except OSError:
+        return jsonify({"status": "degraded", "reason": "firewall unreachable"}), 503
     return jsonify({"status": "ok"})
 
 

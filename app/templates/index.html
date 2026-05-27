@@ -141,10 +141,32 @@ async function setAll(action) {
   await Promise.all(toggles.map(t => toggleRule(t)));
 }
 
-function refreshAll() {
+async function refreshAll(silent = false) {
   const btn = document.getElementById('refreshBtn');
-  btn.querySelector('i').classList.add('spin');
-  setTimeout(() => { window.location.reload(); }, 200);
+  const icon = btn.querySelector('i');
+  if (!silent) icon.classList.add('spin');
+  try {
+    const resp = await fetch('/api/rules');
+    if (!resp.ok) return;
+    const allRules = await resp.json();
+    const byName = Object.fromEntries(allRules.map(r => [r.name, r]));
+    document.querySelectorAll('.rule-toggle').forEach(toggle => {
+      const rule = byName[toggle.dataset.rule];
+      if (!rule) return;
+      const idx = toggle.dataset.index;
+      const enabled = rule.status.toLowerCase() === 'enable';
+      const card = document.getElementById(`card-${idx}`);
+      const badge = document.getElementById(`badge-${idx}`);
+      toggle.checked = enabled;
+      card.className = `card rule-card ${enabled ? 'enabled' : 'disabled'} mb-3`;
+      badge.className = `badge status-badge ${enabled ? 'enabled' : 'disabled'} mt-1`;
+      badge.textContent = enabled ? 'ALLOWED' : 'BLOCKED';
+    });
+  } finally {
+    if (!silent) icon.classList.remove('spin');
+  }
 }
+
+setInterval(() => refreshAll(true), 30000);
 </script>
 {% endblock %}
