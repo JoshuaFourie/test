@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from functools import wraps
 from flask import (
@@ -30,6 +31,26 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 config = ConfigManager("/data/config.json")
+
+_rules_cache: list[dict] | None = None
+_rules_cache_ts: float = 0.0
+_RULES_CACHE_TTL: float = 10.0  # seconds
+
+
+def _get_cached_rules() -> list[dict]:
+    global _rules_cache, _rules_cache_ts
+    now = time.monotonic()
+    if _rules_cache is not None and (now - _rules_cache_ts) < _RULES_CACHE_TTL:
+        return _rules_cache
+    rules = _api().get_firewall_rules()
+    _rules_cache = rules
+    _rules_cache_ts = now
+    return rules
+
+
+def _invalidate_rules_cache() -> None:
+    global _rules_cache
+    _rules_cache = None
 
 
 def _api() -> SophosXGAPI:
@@ -94,13 +115,14 @@ def require_mac_auth(f):
 @app.route("/")
 @require_mac_auth
 def index():
+    allowed = _allowed_macs()
     kid_rules: list[str] = config.get("kid_rules", [])
     rule_statuses: dict = {}
     error: str | None = None
 
     if kid_rules:
         try:
-            all_rules = _api().get_firewall_rules()
+            all_rules = _get_cached_rules()
             by_name = {r["name"]: r for r in all_rules}
             for name in kid_rules:
                 rule_statuses[name] = by_name.get(name, {"name": name, "status": "unknown"})
@@ -113,7 +135,7 @@ def index():
         kid_rules=kid_rules,
         rule_statuses=rule_statuses,
         error=error,
-        setup_mode=not _allowed_macs(),
+        setup_mode=not allowed,
     )
 
 
@@ -131,6 +153,7 @@ def toggle_rule(rule_name: str):
 
     try:
         _api().set_rule_status(rule_name, action == "enable")
+        _invalidate_rules_cache()
         logger.info(f"Rule '{rule_name}' set to {action} by {session.get('client_mac')}")
         return jsonify({"success": True, "rule": rule_name, "status": action})
     except SophosAPIError as e:

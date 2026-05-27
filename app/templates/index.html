@@ -133,15 +133,12 @@ async function toggleRule(checkbox) {
 }
 
 async function setAll(action) {
-  const toggles = document.querySelectorAll('.rule-toggle:not([disabled])');
-  for (const toggle of toggles) {
-    const shouldBeChecked = action === 'enable';
-    if (toggle.checked !== shouldBeChecked) {
-      toggle.checked = shouldBeChecked;
-      await toggleRule(toggle);
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
+  const shouldBeChecked = action === 'enable';
+  const toggles = [...document.querySelectorAll('.rule-toggle:not([disabled])')].filter(
+    t => t.checked !== shouldBeChecked
+  );
+  toggles.forEach(t => { t.checked = shouldBeChecked; });
+  await Promise.all(toggles.map(t => toggleRule(t)));
 }
 
 function refreshAll() {
