@@ -14,4 +14,4 @@ COPY app/ .
 
 EXPOSE 9000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:9000", "--workers", "2", "--timeout", "30", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:9000", "--workers", "1", "--threads", "8", "--timeout", "30", "app:app"]

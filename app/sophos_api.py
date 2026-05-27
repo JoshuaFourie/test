@@ -1,11 +1,15 @@
 import requests
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils as saxutils
 import logging
 from urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
+
+# Shared session for connection pooling across API calls
+_http_session = requests.Session()
 
 
 class SophosAPIError(Exception):
@@ -30,7 +34,7 @@ class SophosXGAPI:
 </Request>"""
         logger.debug(f"Sending XML request: {body_xml[:200]}")
         try:
-            resp = requests.post(
+            resp = _http_session.post(
                 self.base_url,
                 data={"reqxml": payload},
                 verify=False,

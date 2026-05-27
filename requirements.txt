@@ -3,3 +3,4 @@ requests==2.32.3
 python-dotenv==1.0.1
 gunicorn==22.0.0
 cryptography==42.0.7
+flask-limiter==3.8.0
