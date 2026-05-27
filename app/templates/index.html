@@ -80,6 +80,27 @@
     <i class="bi bi-check-circle-fill me-2"></i>Allow All Kids Rules
   </button>
 </div>
+{% if activity_log %}
+<details class="mt-4">
+  <summary class="text-secondary small fw-semibold mb-2" style="cursor:pointer">
+    <i class="bi bi-clock-history me-1"></i>Recent Activity
+  </summary>
+  <div class="card mt-2">
+    <ul class="list-group list-group-flush" style="font-size:0.82rem">
+      {% for entry in activity_log[:20] %}
+      <li class="list-group-item bg-transparent border-secondary d-flex justify-content-between align-items-center py-2">
+        <span>
+          <span class="badge {{ 'bg-success' if entry.action == 'enable' else 'bg-danger' }} me-2">
+            {{ 'ON' if entry.action == 'enable' else 'OFF' }}
+          </span>
+          {{ entry.rule }}
+        </span>
+        <span class="text-secondary">{{ entry.ts[11:16] }} &nbsp;{{ entry.ts[:10] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</details>
 {% endif %}
 
 {% endblock %}
@@ -168,5 +189,29 @@ async function refreshAll(silent = false) {
 }
 
 setInterval(() => refreshAll(true), 30000);
+
+function applyRuleState(ruleName, status) {
+  const toggle = document.querySelector(`.rule-toggle[data-rule="${CSS.escape(ruleName)}"]`);
+  if (!toggle) return;
+  const idx = toggle.dataset.index;
+  const enabled = status.toLowerCase() === 'enable' || status === 'enable';
+  toggle.checked = enabled;
+  document.getElementById(`card-${idx}`).className = `card rule-card ${enabled ? 'enabled' : 'disabled'} mb-3`;
+  const badge = document.getElementById(`badge-${idx}`);
+  badge.className = `badge status-badge ${enabled ? 'enabled' : 'disabled'} mt-1`;
+  badge.textContent = enabled ? 'ALLOWED' : 'BLOCKED';
+}
+
+function connectSSE() {
+  const es = new EventSource('/api/stream');
+  es.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'rule_change') applyRuleState(data.rule, data.status);
+    } catch {}
+  };
+  es.onerror = () => { es.close(); setTimeout(connectSSE, 5000); };
+}
+connectSSE();
 </script>
 {% endblock %}
